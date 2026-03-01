@@ -31,6 +31,7 @@ import ResetButton from "@/features/fancy-form/components/atoms/buttons/reset"
 import { showToast } from "@/features/fancy-form/utils/form"
 import { TOAST_TYPE } from '@/features/fancy-form/types/toast'
 import { formId, formSendInputId, formReceiveInputId } from "@/features/fancy-form/constants/form"
+import useTokenData from "@/features/fancy-form/hooks/useTokenData"
 
 const formSchema = z.object({
   amountSend: z
@@ -40,6 +41,8 @@ const formSchema = z.object({
 })
 
 export default function SwapFormTemplate() {
+  const {tokens} = useTokenData()
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
