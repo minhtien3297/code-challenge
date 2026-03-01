@@ -1,7 +1,7 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Controller, useForm } from "react-hook-form"
+import { Controller, useForm, useWatch } from "react-hook-form"
 import * as z from "zod"
 
 import {
@@ -14,56 +14,112 @@ import {
 } from "@/components/ui/card"
 import {
   Field,
-  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupText,
-} from "@/components/ui/input-group"
 
 import SubmitButton from "@/features/fancy-form/components/atoms/buttons/submit"
 import ResetButton from "@/features/fancy-form/components/atoms/buttons/reset"
 import { showToast } from "@/features/fancy-form/utils/form"
 import { TOAST_TYPE } from '@/features/fancy-form/types/toast'
-import { formId, formSendInputId, formReceiveInputId } from "@/features/fancy-form/constants/form"
+import { formId, formSendInputId } from "@/features/fancy-form/constants/form"
+import TokenSelect from "@/features/fancy-form/components/atoms/selects/tokens"
 import useTokenData from "@/features/fancy-form/hooks/useTokenData"
+import { useMemo, useState } from "react"
+import type { Token } from "@/features/fancy-form/types/token"
 
 const formSchema = z.object({
   amountSend: z
-    .string().nonempty(),
-  amountReceive: z
-    .string().nullable()
+  .string()
+  .trim()
+  .min(1, "Amount is required")
+  .refine(
+    (val) => {
+      const num = Number(val);
+
+      return !isNaN(num) && num > 0;
+    },
+    { message: "Must be a number greater than 0" }
+  ),
+  sendTokenId: z.string().min(1, "Please select token to send"),
+  receiveTokenId: z.string().min(1, "Please select token to receive"),
 })
 
+const defaultToken: Token = {
+  id: "",
+  currency: "",
+  date: "",
+  price: 0,
+  image: ""
+}
+
 export default function SwapFormTemplate() {
-  const {tokens} = useTokenData()
+  const { tokens, postTokenSwap } = useTokenData()
+
+  const [loading, setLoading] =useState<boolean>(false)
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       amountSend: "",
-      amountReceive: "",
+      sendTokenId: "",
+      receiveTokenId: "",
     },
   })
+
+  const { amountSend, sendTokenId, receiveTokenId } = useWatch({
+    control: form.control,
+  })
+
+  const sendToken = useMemo(
+    () => tokens.find(token => token.id === sendTokenId) ?? defaultToken,
+    [tokens, sendTokenId]
+  )
+
+  const receiveToken = useMemo(
+    () => tokens.find(token => token.id === receiveTokenId) ?? defaultToken,
+    [tokens, receiveTokenId]
+  )
+
+  const receiveValue = useMemo(() => {
+    const sendAmount = Number(amountSend);
+
+    if (isNaN(sendAmount)) {
+      return 0;
+    }
+
+    const sendPrice = sendToken?.price ?? 0;
+    const receivePrice = receiveToken?.price ?? 0;
+
+    if (receivePrice === 0) {
+      return 0;
+    }
+
+    return sendAmount * sendPrice / receivePrice
+  }, [sendToken, receiveToken, amountSend])
 
   const onReset = () => {
     form.reset()
   }
 
   const onSubmit = (data: z.infer<typeof formSchema>) => {
-    try {
-      console.log(data)
-      onReset()
-      showToast("Successfully swap token", TOAST_TYPE.SUCCESS)
-    } catch (error) {
-      console.error(error)
-      showToast("Error swap token", TOAST_TYPE.ERROR)
-    }
+    setLoading(true)
+
+    setTimeout(() => {
+      try {
+        postTokenSwap(Number(data.amountSend), sendTokenId ?? '', receiveTokenId ?? '')
+
+        showToast("Successfully swap token", TOAST_TYPE.SUCCESS)
+      } catch (error) {
+        console.error(error)
+        showToast("Error swap token", TOAST_TYPE.ERROR)
+      }finally{
+        setLoading(false)
+        onReset()
+      }
+    }, 1000)
   }
 
   return (
@@ -90,46 +146,54 @@ export default function SwapFormTemplate() {
 
                     <Input
                       {...field}
+                      disabled={loading || field.disabled}
                       id={formSendInputId}
+                      type="number"
                       aria-invalid={fieldState.invalid}
                       placeholder="Enter amount to send..."
                       autoComplete="off"
                     />
-
                     {fieldState.invalid && (
                       <FieldError errors={[fieldState.error]} />
                     )}
+
+                    <TokenSelect
+                      tokens={tokens}
+                      chosenValue={sendTokenId ?? ''}
+                      onChosenValueChange={(newId) => {
+                        form.setValue("sendTokenId", newId, {
+                          shouldValidate: true,
+                          shouldDirty: true,
+                        })
+                      }}
+                    />
                   </Field>
                 )}
               />
 
-              <Controller
-                name="amountReceive"
-                control={form.control}
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor={formReceiveInputId}>
-                      Amount to receive
-                    </FieldLabel>
+              <Field>
+                <FieldLabel>
+                  Amount to receive
+                </FieldLabel>
 
-                    <InputGroup>
-                      <InputGroupText
-                        {...field}
-                        id={formReceiveInputId}
-                        aria-readonly
-                        className="h-3 resize-none"
-                      />
-                      <InputGroupAddon align="block-end">
-                        <InputGroupText className="tabular-nums">
-                        </InputGroupText>
-                      </InputGroupAddon>
-                    </InputGroup>
+                <Input
+                  className="disabled:opacity-100"
+                  value={receiveValue}
+                  disabled
+                />
 
-                    <FieldDescription>
-                    </FieldDescription>
-                  </Field>
-                )}
-              />
+                <TokenSelect
+                  tokens={tokens}
+                  chosenValue={receiveTokenId ?? ''}
+                  onChosenValueChange={(newId) => {
+                    form.setValue("receiveTokenId", newId, {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    })
+                  }}
+                />
+              </Field>
+
             </FieldGroup>
           </form>
         </CardContent>
@@ -138,7 +202,7 @@ export default function SwapFormTemplate() {
           <Field orientation="horizontal">
             <ResetButton title="Reset" action={onReset} />
 
-            <SubmitButton title="Confirm Swap" id={formId} />
+            <SubmitButton title="Confirm Swap" id={formId} loading={loading} />
           </Field>
         </CardFooter>
       </Card>
