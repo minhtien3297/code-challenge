@@ -1,14 +1,14 @@
 // import reactLogo from './assets/react.svg'
 // import viteLogo from '/vite.svg'
-import { Button } from "@/components/ui/button"
-
+import { FancyForm } from "@/features/fancy-form/components/atoms/input"
+import { Routes, Route} from 'react-router-dom'
 
 function App() {
   return (
     <>
-      <div className="flex min-h-svh flex-col items-center justify-center">
-      <Button>Click me</Button>
-    </div>
+      <Routes>
+        <Route path="/" element={<FancyForm/>} />
+      </Routes>
     </>
   )
 }
